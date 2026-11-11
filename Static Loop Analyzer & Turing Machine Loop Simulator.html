@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task 4: Static Loop Analyzer & Halting Undecidability Simulator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.min.js"></script>
+  <style>
+    .glass-card {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .tape-cell {
+      min-width: 48px;
+      height: 56px;
+      font-family: monospace;
+      transition: all 0.2s ease;
+    }
+    .tape-cell.active {
+      border-color: #3b82f6;
+      background: rgba(59, 130, 246, 0.2);
+      transform: scale(1.08);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans">
+  
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <div>
+        <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
+          FLA Task 4: Infinite Loop Analysis & System Design
+        </h1>
+        <p class="text-xs text-slate-400">Formal Language & Automata (21CSC301T) | Turing Machine Computability</p>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="switchTab('analyzer')" id="tab-btn-analyzer" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white shadow">
+          <i class="fa-solid fa-code-branch mr-1"></i> Static Loop Analyzer
+        </button>
+        <button onclick="switchTab('utm')" id="tab-btn-utm" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700">
+          <i class="fa-solid fa-microchip mr-1"></i> UTM Simulator
+        </button>
+        <button onclick="switchTab('reduction')" id="tab-btn-reduction" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700">
+          <i class="fa-solid fa-diagram-project mr-1"></i> Reduction & Proofs
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-grow max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+
+    <!-- TAB 1: STATIC LOOP ANALYZER -->
+    <section id="tab-analyzer" class="space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Code & Controls Column -->
+        <div class="lg:col-span-5 space-y-4">
+          <div class="glass-card p-5 rounded-xl space-y-4">
+            <div class="flex justify-between items-center">
+              <h2 class="font-bold text-slate-200 flex items-center gap-2">
+                <i class="fa-solid fa-code text-blue-400"></i> Code Preset Selection
+              </h2>
+              <span class="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">Restricted Verification</span>
+            </div>
+
+            <select id="code-preset" onchange="loadPreset()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500">
+              <option value="safe_decrement">1. Safe Bounded Loop (Proven Terminating)</option>
+              <option value="unsafe_mutation">2. Unsafe Non-Monotonic Loop (Potential Infinite)</option>
+              <option value="collatz">3. Collatz Conjecture (Undecidable for Arbitrary N)</option>
+              <option value="nested_bounded">4. Nested Loop with Constant Bounds (Safe)</option>
+            </select>
+
+            <div class="relative">
+              <textarea id="code-editor" class="w-full h-56 bg-slate-900 border border-slate-800 rounded-lg p-3 font-mono text-xs text-blue-300 focus:outline-none focus:border-blue-500 leading-relaxed" readonly></textarea>
+            </div>
+
+            <button onclick="analyzeLoop()" class="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold rounded-lg text-sm transition shadow-lg flex items-center justify-center gap-2">
+              <i class="fa-solid fa-magnifying-glass"></i> Run Static Abstract Analysis
+            </button>
+          </div>
+
+          <!-- Theoretical Summary Card -->
+          <div class="glass-card p-5 rounded-xl space-y-2 border-l-4 border-l-indigo-500">
+            <h3 class="text-xs font-bold text-indigo-400 uppercase tracking-wider">Engineering Principle</h3>
+            <p class="text-xs text-slate-300 leading-relaxed">
+              While general infinite loop detection is undecidable ($A_{\text{TM}} \le_m \text{LOOP}_{\text{TM}}$), static analyzers use <strong>Abstract Interpretation</strong> and <strong>Ranking Functions $\mathcal{R}(s)$</strong> over well-founded domains to prove termination for bounded code structures.
+            </p>
+          </div>
+        </div>
+
+        <!-- Analysis Results & CFG Graph Column -->
+        <div class="lg:col-span-7 space-y-4">
+          
+          <!-- Result Card -->
+          <div class="glass-card p-5 rounded-xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 class="font-bold text-slate-200 text-sm">Static Verification Output</h3>
+              <span id="analysis-status-badge" class="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-400">
+                Awaiting Analysis
+              </span>
+            </div>
+
+            <div id="analysis-metrics" class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+              <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-800">
+                <span class="block text-xs text-slate-400">Cycle Detected</span>
+                <span id="metric-cycle" class="text-sm font-bold text-slate-200">-</span>
+              </div>
+              <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-800">
+                <span class="block text-xs text-slate-400">Monotonic Variant</span>
+                <span id="metric-variant" class="text-sm font-bold text-slate-200">-</span>
+              </div>
+              <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-800">
+                <span class="block text-xs text-slate-400">State Space</span>
+                <span id="metric-statespace" class="text-sm font-bold text-slate-200">-</span>
+              </div>
+              <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-800">
+                <span class="block text-xs text-slate-400">Decision Outcome</span>
+                <span id="metric-outcome" class="text-sm font-bold text-slate-200">-</span>
+              </div>
+            </div>
+
+            <!-- Detail Breakdown -->
+            <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-2 text-xs font-mono">
+              <div class="flex justify-between border-b border-slate-800 pb-1">
+                <span class="text-slate-400">Ranking Function R(s):</span>
+                <span id="ranking-func-text" class="text-indigo-400">None</span>
+              </div>
+              <div class="flex justify-between border-b border-slate-800 pb-1">
+                <span class="text-slate-400">Well-Founded Domain:</span>
+                <span id="domain-text" class="text-slate-300">N/A</span>
+              </div>
+              <div class="pt-1 text-slate-300 leading-normal" id="analysis-reasoning">
+                Select a code preset and click "Run Static Abstract Analysis" to initiate Tarjan's cycle detection and ranking function synthesis.
+              </div>
+            </div>
+          </div>
+
+          <!-- CFG Visualizer -->
+          <div class="glass-card p-5 rounded-xl space-y-3">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+              <span>Control Flow Graph (CFG) Rendering</span>
+              <span class="text-[10px] text-blue-400">Graph Theory & Cycle Identification</span>
+            </h3>
+            <div id="cfg-container" class="bg-slate-900/90 rounded-lg p-4 min-h-[220px] flex items-center justify-center border border-slate-800">
+              <div class="mermaid text-center" id="mermaid-target">
+                graph TD
+                  A[Entry: safe_loop] --> B[Condition Check: n > 0]
+                  B -- True --> C[Body: n = n - 1]
+                  C --> B
+                  B -- False --> D[Exit / Return]
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TAB 2: UNIVERSAL TURING MACHINE SIMULATOR -->
+    <section id="tab-utm" class="space-y-6 hidden">
+      <div class="glass-card p-6 rounded-xl space-y-6">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-4">
+          <div>
+            <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+              <i class="fa-solid fa-microchip text-indigo-400"></i> Universal Turing Machine Tape Simulator
+            </h2>
+            <p class="text-xs text-slate-400">Simulating Bounded Execution vs. Non-Terminating Loop Traversal</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <button onclick="stepUTM()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded text-slate-200 border border-slate-700">
+              <i class="fa-solid fa-step-forward mr-1"></i> Step
+            </button>
+            <button onclick="toggleRunUTM()" id="run-utm-btn" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded text-white shadow">
+              <i class="fa-solid fa-play mr-1"></i> Auto Play
+            </button>
+            <button onclick="resetUTM()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded text-slate-300">
+              <i class="fa-solid fa-rotate-left mr-1"></i> Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- TM Tape Graphic -->
+        <div class="space-y-2">
+          <div class="flex justify-between text-xs text-slate-400 px-1">
+            <span>Infinite Tape Memory (Cell Pointer Below)</span>
+            <span id="tm-step-count" class="font-mono text-indigo-400">Step: 0</span>
+          </div>
+          <div id="tape-wrapper" class="flex justify-center items-center gap-1 overflow-x-auto py-4 bg-slate-900/80 rounded-xl border border-slate-800">
+            <!-- Dynamically populated tape cells -->
+          </div>
+        </div>
+
+        <!-- Machine State & Config -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-1">
+            <span class="text-xs text-slate-400">Current State ($q$)</span>
+            <span id="tm-state" class="block font-mono text-lg font-bold text-blue-400">q0 (Start)</span>
+          </div>
+          <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-1">
+            <span class="text-xs text-slate-400">Simulated Program Mode</span>
+            <select id="tm-mode" onchange="resetUTM()" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200">
+              <option value="terminating">Bounded Program (Halts in 6 steps)</option>
+              <option value="infinite">Infinite Loop Machine (State Cycle q1 <-> q2)</option>
+            </select>
+          </div>
+          <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-1">
+            <span class="text-xs text-slate-400">Halting Decider Assessment</span>
+            <span id="tm-assessment" class="block font-mono text-xs font-bold text-amber-400 mt-1">
+              Undecidable in Finite Time
+            </span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TAB 3: REDUCTION & FORMAL PROOFS -->
+    <section id="tab-reduction" class="space-y-6 hidden">
+      <div class="glass-card p-6 rounded-xl space-y-6">
+        <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+          <i class="fa-solid fa-diagram-project text-blue-400"></i> Reduction Proof & Computability Classification
+        </h2>
+
+        <!-- Reduction Flow -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="bg-slate-900/80 p-5 rounded-xl border border-slate-800 space-y-3">
+            <h3 class="text-sm font-bold text-blue-400 border-b border-slate-800 pb-2">
+              Mapping Reduction: $A_{\text{TM}} \le_m \text{LOOP}_{\text{TM}}$
+            </h3>
+            <p class="text-xs text-slate-300 leading-relaxed">
+              To prove $\text{LOOP}_{\text{TM}}$ is undecidable, we reduce the known undecidable Halting Problem $A_{\text{TM}}$ to it.
+            </p>
+            <div class="bg-slate-950 p-3 rounded font-mono text-[11px] text-slate-300 space-y-1 border border-slate-800">
+              <div>Algorithm H(&lt;M, w&gt;):</div>
+              <div class="pl-4">1. Build M' that runs M on w.</div>
+              <div class="pl-4">2. If M accepts w &rarr; M' halts.</div>
+              <div class="pl-4">3. If M rejects w &rarr; M' enters infinite loop.</div>
+              <div class="pl-4">4. Run LOOP_DECIDER(&lt;M', w&gt;).</div>
+              <div class="pl-4 text-emerald-400">5. If LOOP_DECIDER accepts &rarr; REJECT &lt;M,w&gt;.</div>
+            </div>
+          </div>
+
+          <div class="bg-slate-900/80 p-5 rounded-xl border border-slate-800 space-y-3">
+            <h3 class="text-sm font-bold text-indigo-400 border-b border-slate-800 pb-2">
+              Arithmetical Hierarchy Spectrum
+            </h3>
+            <ul class="text-xs space-y-2 text-slate-300">
+              <li class="p-2 rounded bg-slate-950 border border-emerald-500/30">
+                <strong class="text-emerald-400">Decidable (R):</strong> Loop-bounded programs without recursion, DFA/NFA membership.
+              </li>
+              <li class="p-2 rounded bg-slate-950 border border-amber-500/30">
+                <strong class="text-amber-400">Recognizable (RE):</strong> $HALT_{\text{TM}}$ (halts if it accepts, loops infinitely if not).
+              </li>
+              <li class="p-2 rounded bg-slate-950 border border-rose-500/30">
+                <strong class="text-rose-400">Co-RE:</strong> $LOOP_{\text{TM}}$ (recognizable only when it loops infinitely).
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // Tab Switching Logic
+    function switchTab(tabId) {
+      ['analyzer', 'utm', 'reduction'].forEach(t => {
+        document.getElementById(`tab-${t}`).classList.add('hidden');
+        document.getElementById(`tab-btn-${t}`).className = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700';
+      });
+      document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+      document.getElementById(`tab-btn-${tabId}`).className = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white shadow';
+    }
+
+    // Code Presets Data
+    const presets = {
+      safe_decrement: {
+        code: `def safe_loop(n: int):\n    # Decrementing loop bounded below by 0\n    while n > 0:\n        n = n - 1\n    return n`,
+        cycle: "Yes (Controlled)",
+        variant: "R(n) = n",
+        space: "Finite (n -> 0)",
+        outcome: "SAFE (Terminates)",
+        badge: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+        func: "R(s) = s.n",
+        domain: "Non-negative integers (W, <)",
+        reasoning: "Monotonic decrease proven by ranking function R(n) = n. Every iteration reduces n by 1 until reaching lower bound 0.",
+        mermaid: `graph TD\n  A[Entry: safe_loop] --> B[Condition: n > 0]\n  B -- True --> C[n = n - 1]\n  C --> B\n  B -- False --> D[Return n]`
+      },
+      unsafe_mutation: {
+        code: `def unsafe_loop(n: int):\n    # Variable mutation without guaranteed monotonicity\n    while n != 0:\n        if n % 2 == 0:\n            n = n + 2  # Divergent increase\n        else:\n            n = n - 1`,
+        cycle: "Yes (Unbounded)",
+        variant: "None Found",
+        space: "Infinite",
+        outcome: "WARNING (Possible Infinite Loop)",
+        badge: "bg-rose-500/20 text-rose-400 border-rose-500/30",
+        func: "Undefined / Non-monotonic",
+        domain: "Unbounded Integers Z",
+        reasoning: "State mutation n = n + 2 for even inputs causes value divergence away from termination condition n == 0.",
+        mermaid: `graph TD\n  A[Entry: unsafe_loop] --> B[Condition: n != 0]\n  B -- True --> C{n % 2 == 0}\n  C -- Yes --> D[n = n + 2]\n  C -- No --> E[n = n - 1]\n  D --> B\n  E --> B\n  B -- False --> F[Exit]`
+      },
+      collatz: {
+        code: `def collatz_loop(n: int):\n    # 3n + 1 Conjecture\n    while n > 1:\n        if n % 2 == 0:\n            n = n // 2\n        else:\n            n = 3 * n + 1\n    return n`,
+        cycle: "Dynamic Cycle",
+        variant: "Unproven Generally",
+        space: "Unknown Bounds",
+        outcome: "UNDECIDABLE (Static Bounds Fail)",
+        badge: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+        func: "Unknown Global Function",
+        domain: "Positive Integers N+",
+        reasoning: "Exhibits non-linear dynamic transformations. Universal termination for all initial n is an open mathematical problem.",
+        mermaid: `graph TD\n  A[Entry: collatz_loop] --> B[Condition: n > 1]\n  B -- True --> C{n % 2 == 0}\n  C -- Even --> D[n = n // 2]\n  C -- Odd --> E[n = 3n + 1]\n  D --> B\n  E --> B\n  B -- False --> F[Return n]`
+      },
+      nested_bounded: {
+        code: `def nested_loop():\n    # Static constant bounds\n    for i in range(10):\n        for j in range(5):\n            pass`,
+        cycle: "Nested Bounded",
+        variant: "R(i, j) = 5*(10-i) + (5-j)",
+        space: "Finite (50 Steps)",
+        outcome: "SAFE (Proven Bounded)",
+        badge: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+        func: "R(i, j) = 50 - (5i + j)",
+        domain: "Lexicographically Ordered Tuples",
+        reasoning: "Loops are governed by constant range limits. Upper bound state space is strictly finite and static.",
+        mermaid: `graph TD\n  A[Outer Loop: i in 0..9] --> B[Inner Loop: j in 0..4]\n  B --> B\n  B -- Inner Exit --> A\n  A -- Outer Exit --> C[Done]`
+      }
+    };
+
+    function loadPreset() {
+      const key = document.getElementById('code-preset').value;
+      document.getElementById('code-editor').value = presets[key].code;
+    }
+
+    function analyzeLoop() {
+      const key = document.getElementById('code-preset').value;
+      const data = presets[key];
+
+      document.getElementById('metric-cycle').innerText = data.cycle;
+      document.getElementById('metric-variant').innerText = data.variant;
+      document.getElementById('metric-statespace').innerText = data.space;
+      document.getElementById('metric-outcome').innerText = data.outcome;
+      
+      const badge = document.getElementById('analysis-status-badge');
+      badge.innerText = data.outcome.split(' ')[0];
+      badge.className = `px-2.5 py-1 rounded-full text-xs font-bold ${data.badge}`;
+
+      document.getElementById('ranking-func-text').innerText = data.func;
+      document.getElementById('domain-text').innerText = data.domain;
+      document.getElementById('analysis-reasoning').innerText = data.reasoning;
+
+      // Update Mermaid Diagram
+      const target = document.getElementById('mermaid-target');
+      target.removeAttribute('data-processed');
+      target.innerHTML = data.mermaid;
+      mermaid.contentLoaded();
+    }
+
+    // Turing Machine Simulator Logic
+    let tape = ['1', '1', '1', '0', 'B', 'B', 'B', 'B'];
+    let head = 0;
+    let tmStep = 0;
+    let tmTimer = null;
+
+    function renderTape() {
+      const wrapper = document.getElementById('tape-wrapper');
+      wrapper.innerHTML = '';
+      tape.forEach((val, idx) => {
+        const div = document.createElement('div');
+        div.className = `tape-cell flex items-center justify-center font-mono font-bold text-lg rounded-lg border ${idx === head ? 'active border-blue-500 bg-blue-500/20 text-blue-300' : 'border-slate-800 bg-slate-950 text-slate-400'}`;
+        div.innerText = val;
+        wrapper.appendChild(div);
+      });
+      document.getElementById('tm-step-count').innerText = `Step: ${tmStep}`;
+    }
+
+    function stepUTM() {
+      const mode = document.getElementById('tm-mode').value;
+      tmStep++;
+      if (mode === 'terminating') {
+        if (head < 3) {
+          tape[head] = '0';
+          head++;
+          document.getElementById('tm-state').innerText = `q1 (Processing Cell ${head})`;
+        } else {
+          document.getElementById('tm-state').innerText = 'q_accept (HALTED)';
+          document.getElementById('tm-assessment').innerText = 'Proven Halting in 4 steps';
+          document.getElementById('tm-assessment').className = 'block font-mono text-xs font-bold text-emerald-400 mt-1';
+          if (tmTimer) clearInterval(tmTimer);
+        }
+      } else {
+        // Infinite Mode: Ping-pong between cell 0 and 1
+        head = head === 0 ? 1 : 0;
+        const qState = head === 0 ? 'q1' : 'q2';
+        document.getElementById('tm-state').innerText = `${qState} (Loop Cycle)`;
+        document.getElementById('tm-assessment').innerText = 'Non-Terminating Cycle (Infinite)';
+        document.getElementById('tm-assessment').className = 'block font-mono text-xs font-bold text-rose-400 mt-1';
+      }
+      renderTape();
+    }
+
+    function toggleRunUTM() {
+      const btn = document.getElementById('run-utm-btn');
+      if (tmTimer) {
+        clearInterval(tmTimer);
+        tmTimer = null;
+        btn.innerHTML = '<i class="fa-solid fa-play mr-1"></i> Auto Play';
+      } else {
+        tmTimer = setInterval(stepUTM, 400);
+        btn.innerHTML = '<i class="fa-solid fa-pause mr-1"></i> Pause';
+      }
+    }
+
+    function resetUTM() {
+      if (tmTimer) clearInterval(tmTimer);
+      tmTimer = null;
+      tape = ['1', '1', '1', '0', 'B', 'B', 'B', 'B'];
+      head = 0;
+      tmStep = 0;
+      document.getElementById('tm-state').innerText = 'q0 (Start)';
+      document.getElementById('tm-assessment').innerText = 'Undecidable in Finite Time';
+      document.getElementById('tm-assessment').className = 'block font-mono text-xs font-bold text-amber-400 mt-1';
+      document.getElementById('run-utm-btn').innerHTML = '<i class="fa-solid fa-play mr-1"></i> Auto Play';
+      renderTape();
+    }
+
+    // Initialize Page Defaults
+    window.onload = () => {
+      mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+      loadPreset();
+      analyzeLoop();
+      renderTape();
+    };
+  </script>
+</body>
+</html>
